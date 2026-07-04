@@ -1,115 +1,83 @@
-import logging
 import os
-import pandas as pd
+import math
 import numpy as np
+import pandas as pd
 import yfinance as yf
 import xgboost as xgb
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("ModelTrainer")
-
 def calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
-    """Calculates Relative Strength Index (RSI) using pandas."""
     delta = series.diff()
-    gain = (delta.where(delta > 0, 0)).copy()
-    loss = (-delta.where(delta < 0, 0)).copy()
-    
-    # Use exponential moving average for smoothing
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
     avg_gain = gain.ewm(com=period - 1, min_periods=period).mean()
     avg_loss = loss.ewm(com=period - 1, min_periods=period).mean()
-    
-    rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+    rs = avg_gain / (avg_loss + 1e-9)
+    return 100.0 - (100.0 / (1.0 + rs))
 
-def train_and_save_model():
-    logger.info("Initializing offline training pipeline...")
-    
-    # 1. Download historical BTC-USD data from yfinance (1-hour bars for last 1 year)
-    # BTC-USD is used because it ticks 24/7, providing a highly active and comprehensive dataset.
-    ticker = "BTC-USD"
-    logger.info(f"Downloading historical 1-hour data for {ticker} from Yahoo Finance...")
-    try:
-        data = yf.download(ticker, period="1y", interval="1h")
-        if data.empty:
-            raise ValueError("No data returned from yfinance.")
-        logger.info(f"Successfully downloaded {len(data)} bars.")
-    except Exception as e:
-        logger.error(f"Failed to download data: {e}")
-        return False
+def extract_features(df: pd.DataFrame) -> pd.DataFrame:
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [col[0] for col in df.columns]
+    close = df["Close"]
+    data = pd.DataFrame(index=df.index)
+    data["ret_1"] = np.log(close / close.shift(1))
+    data["ret_4"] = np.log(close / close.shift(4))
+    data["ret_12"] = np.log(close / close.shift(12))
+    fast_ema = close.ewm(span=8).mean()
+    slow_ema = close.ewm(span=24).mean()
+    data["sma_ratio"] = fast_ema / (slow_ema + 1e-9)
+    data["rsi"] = calculate_rsi(close, 14)
+    data["volatility"] = data["ret_1"].rolling(16).std()
+    data["target"] = (close.shift(-2) > close).astype(int)
+    return data.dropna()
 
-    # Flatten columns in case of multi-indexing
-    if isinstance(data.columns, pd.MultiIndex):
-        data.columns = [col[0] for col in data.columns]
+def train():
+    tickers = ["BTC-USD", "ETH-USD", "SOL-USD", "NVDA", "AAPL"]
+    frames = []
+    for ticker in tickers:
+        try:
+            raw = yf.download(ticker, period="60d", interval="15m", progress=False)
+            if not raw.empty and len(raw) > 50:
+                feat = extract_features(raw)
+                frames.append(feat)
+        except Exception:
+            continue
 
-    df = data.copy()
+    if not frames:
+        return
 
-    # 2. Feature Engineering
-    logger.info("Engineering technical indicators (SMA, RSI, Log Returns)...")
-    # SMA Ratio (SMA_10 / SMA_30)
-    df["SMA_10"] = df["Close"].rolling(window=10).mean()
-    df["SMA_30"] = df["Close"].rolling(window=30).mean()
-    df["sma_ratio"] = df["SMA_10"] / df["SMA_30"]
+    combined = pd.concat(frames, ignore_index=True)
+    features = ["ret_1", "ret_4", "ret_12", "sma_ratio", "rsi", "volatility"]
+    X = combined[features]
+    y = combined["target"]
 
-    # RSI (14)
-    df["rsi"] = calculate_rsi(df["Close"], period=14)
-
-    # Log Returns over past 5 periods
-    df["log_ret"] = np.log(df["Close"] / df["Close"].shift(5))
-
-    # Drop NaNs created by rolling windows
-    df = df.dropna()
-
-    # 3. Create Target Labels
-    # Target = 1 if the price in the next period is higher than current Close, 0 otherwise
-    df["target"] = (df["Close"].shift(-1) > df["Close"]).astype(int)
-    
-    # Drop the last row since we don't have its future target close
-    df = df.iloc[:-1]
-
-    features = ["sma_ratio", "rsi", "log_ret"]
-    X = df[features]
-    y = df["target"]
-
-    # 4. Train-Test Split (Chronological to prevent data leakage)
-    split_idx = int(len(df) * 0.8)
+    split_idx = int(len(combined) * 0.8)
     X_train, X_test = X.iloc[:split_idx], X.iloc[split_idx:]
     y_train, y_test = y.iloc[:split_idx], y.iloc[split_idx:]
 
-    logger.info(f"Training set size: {len(X_train)} rows. Testing set size: {len(X_test)} rows.")
+    dtrain = xgb.DMatrix(X_train, label=y_train, feature_names=features)
+    dtest = xgb.DMatrix(X_test, label=y_test, feature_names=features)
 
-    # 5. Train XGBoost model using the native API
-    logger.info("Fitting native XGBoost Booster...")
-    dtrain = xgb.DMatrix(X_train, label=y_train)
-    dtest = xgb.DMatrix(X_test, label=y_test)
-    
     params = {
         "max_depth": 4,
-        "eta": 0.05,
+        "eta": 0.03,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
         "objective": "binary:logistic",
         "eval_metric": "logloss",
         "seed": 42
     }
-    
-    model = xgb.train(params, dtrain, num_boost_round=100)
 
-    # 6. Evaluate Model
+    model = xgb.train(params, dtrain, num_boost_round=120, evals=[(dtest, "test")], verbose_eval=False)
+
     preds = model.predict(dtest)
-    predictions = (preds > 0.5).astype(int)
-    accuracy = (predictions == y_test).mean()
-    logger.info(f"Model Training Complete. Test Set Accuracy: {accuracy:.4f}")
+    pred_labels = (preds > 0.5).astype(int)
+    acc = (pred_labels == y_test.values).mean()
+    majority = max(y_test.mean(), 1 - y_test.mean())
+    print(f"Test Accuracy: {acc:.4f} | Baseline: {majority:.4f} | Edge: {acc - majority:+.4f}")
 
-    # Log baseline comparison (always predicting 1 or 0)
-    baseline = max(y_test.mean(), 1 - y_test.mean())
-    logger.info(f"Baseline (Always predicting majority class) Accuracy: {baseline:.4f}")
-
-    # 7. Save Model
-    model_path = os.path.join(os.path.dirname(__file__), "xgboost_model.json")
-    logger.info(f"Saving model file to: {model_path}")
-    model.save_model(model_path)
-    logger.info("SUCCESS: Model training complete and exported.")
-    return True
+    out_path = os.path.join(os.path.dirname(__file__), "xgboost_model.json")
+    model.save_model(out_path)
+    print("Model saved to", out_path)
 
 if __name__ == "__main__":
-    train_and_save_model()
+    train()
