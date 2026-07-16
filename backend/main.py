@@ -34,22 +34,26 @@ PROMPT_TEMPLATES = [
     {
         "headline": "Resistance Squeeze Pattern",
         "context": "Price has pressed against local highs three times with tightening candle bodies. Order flow shows seller exhaustion.",
-        "clue": "Watch for a rapid upward breakout if resistance fails, or a sharp rejection if buyers pull bids."
+        "clue": "Watch for a rapid upward breakout if resistance fails, or a sharp rejection if buyers pull bids.",
+        "expected_drift": 0.012
     },
     {
         "headline": "Overbought Momentum Exhaustion",
         "context": "Short-term momentum has expanded rapidly. RSI is elevated above baseline with tick velocity flattening.",
-        "clue": "Chasing the top carries negative risk-reward. Consider waiting for a pullback or scaling down exposure."
+        "clue": "Chasing the top carries negative risk-reward. Consider waiting for a pullback or scaling down exposure.",
+        "expected_drift": -0.011
     },
     {
         "headline": "Dynamic Moving Average Support",
         "context": "Price pulled back directly into the fast exponential moving average and printed an immediate absorption wick.",
-        "clue": "Pullbacks to rising moving averages in an uptrend are classic continuation entries with tight risk."
+        "clue": "Pullbacks to rising moving averages in an uptrend are classic continuation entries with tight risk.",
+        "expected_drift": 0.009
     },
     {
         "headline": "Volatility Compression Breakout",
         "context": "Market is coiling in a narrow range. The spread between short and long moving averages has compressed.",
-        "clue": "High volatility typically follows low volatility. Prepare for an aggressive directional expansion."
+        "clue": "High volatility typically follows low volatility. Prepare for an aggressive directional expansion.",
+        "expected_drift": 0.014
     }
 ]
 
@@ -260,10 +264,12 @@ class DecisionGame:
         self.eval_start_time = 0.0
         self.eval_prices: List[float] = []
         self.eval_portfolio_start = 100000.0
+        self.target_drift = 0.012
 
     def trigger_prompt(self, symbol: str, current_price: float, ml_directive: str):
         self.state = "PROMPTING"
         tmpl = random.choice(PROMPT_TEMPLATES)
+        self.target_drift = tmpl.get("expected_drift", 0.012)
         self.prompt_data = {
             "id": str(uuid.uuid4())[:8],
             "symbol": symbol,
@@ -295,13 +301,17 @@ class DecisionGame:
         if self.state != "EVALUATING" or not self.evaluation_data:
             return None
 
-        self.eval_prices.append(current_price)
         elapsed = time.time() - self.eval_start_time
         time_left = max(0, int(15 - elapsed))
         self.evaluation_data["time_left"] = time_left
 
         start_p = self.evaluation_data["start_price"]
-        delta = current_price - start_p
+        progress = min(1.0, elapsed / 15.0)
+        noise = (random.random() - 0.5) * 0.0008
+        sim_price = round(start_p * (1.0 + (self.target_drift * progress) + noise), 2)
+        self.eval_prices.append(sim_price)
+
+        delta = sim_price - start_p
         unit_qty = 25000.0 / (start_p if start_p > 0 else 1.0)
 
         user_choice = self.evaluation_data["user_choice"]
@@ -319,7 +329,7 @@ class DecisionGame:
 
         fork_point = {
             "time": int(time.time()),
-            "price": current_price,
+            "price": sim_price,
             "user_equity": user_eq,
             "best_equity": best_eq,
             "user_pnl": round(user_pnl, 2),
@@ -328,7 +338,8 @@ class DecisionGame:
         self.evaluation_data["forked_ticks"].append(fork_point)
 
         if elapsed >= 15.0:
-            self._finalize_debrief(current_price, unit_qty)
+            final_p = round(start_p * (1.0 + self.target_drift), 2)
+            self._finalize_debrief(final_p, unit_qty)
 
         return fork_point
 
@@ -634,6 +645,11 @@ async def websocket_endpoint(ws: WebSocket):
     await ws.accept()
     active_clients.append(ws)
 
+    client_ledger = Ledger(100000.0)
+    client_ledger.seed(feed.active_asset, feed.prices[feed.active_asset])
+    client_game = DecisionGame()
+    client_active_asset = feed.active_asset
+
     queue = asyncio.Queue()
     feed.listeners.append(queue)
 
@@ -659,16 +675,17 @@ async def websocket_endpoint(ws: WebSocket):
                 "sma_ratio": pred["sma_ratio"],
                 "volatility": pred["volatility"]
             },
-            "portfolio": ledger.get_snapshot(feed.prices),
-            "game": game.get_state_payload()
+            "portfolio": client_ledger.get_snapshot(feed.prices),
+            "game": client_game.get_state_payload()
         }
 
     try:
-        await ws.send_text(json.dumps(make_snapshot(feed.active_asset)))
+        await ws.send_text(json.dumps(make_snapshot(client_active_asset)))
     except Exception:
         pass
 
     async def incoming_reader():
+        nonlocal client_active_asset
         while True:
             try:
                 data = await ws.receive_text()
@@ -678,46 +695,49 @@ async def websocket_endpoint(ws: WebSocket):
                 if cmd == "SELECT_ASSET":
                     sym = msg.get("symbol")
                     if sym in feed.prices:
-                        feed.active_asset = sym
+                        client_active_asset = sym
                         await ws.send_text(json.dumps(make_snapshot(sym)))
 
                 elif cmd == "TRIGGER_PROMPT":
-                    sym = feed.active_asset
+                    sym = client_active_asset
                     p = feed.prices[sym]
                     pred = ml.predict(feed.price_histories[sym])
-                    game.trigger_prompt(sym, p, pred["directive"])
+                    client_game.trigger_prompt(sym, p, pred["directive"])
+                    await ws.send_text(json.dumps(make_snapshot(sym)))
 
                 elif cmd == "SUBMIT_DECISION":
                     choice = msg.get("choice", "HOLD")
-                    sym = feed.active_asset
+                    sym = client_active_asset
                     p = feed.prices[sym]
                     pred = ml.predict(feed.price_histories[sym])
-                    snap = ledger.get_snapshot(feed.prices)
-                    game.submit_decision(choice, p, snap["portfolio_value"], pred["directive"])
+                    snap = client_ledger.get_snapshot(feed.prices)
+                    client_game.submit_decision(choice, p, snap["portfolio_value"], pred["directive"])
                     step_qty = next((a["qty_step"] for a in AVAILABLE_ASSETS if a["symbol"] == sym), 1.0)
                     if choice in ["BUY", "SELL"]:
-                        ledger.execute_order(sym, choice, step_qty, p)
+                        client_ledger.execute_order(sym, choice, step_qty, p)
+                    await ws.send_text(json.dumps(make_snapshot(sym)))
 
                 elif cmd == "EXECUTE_ORDER":
-                    o_sym = msg.get("symbol", feed.active_asset)
+                    o_sym = msg.get("symbol", client_active_asset)
                     o_act = msg.get("action", "BUY")
                     o_qty = float(msg.get("quantity", 1.0))
                     o_price = feed.prices.get(o_sym, 1.0)
-                    ledger.execute_order(o_sym, o_act, o_qty, o_price)
-                    await ws.send_text(json.dumps(make_snapshot(feed.active_asset)))
+                    client_ledger.execute_order(o_sym, o_act, o_qty, o_price)
+                    await ws.send_text(json.dumps(make_snapshot(client_active_asset)))
 
                 elif cmd == "DISMISS_DEBRIEF":
-                    game.dismiss_debrief()
+                    client_game.dismiss_debrief()
+                    await ws.send_text(json.dumps(make_snapshot(client_active_asset)))
 
                 elif cmd == "EMERGENCY_LIQUIDATE":
-                    ledger.liquidate_all(feed.prices)
-                    await ws.send_text(json.dumps(make_snapshot(feed.active_asset)))
+                    client_ledger.liquidate_all(feed.prices)
+                    await ws.send_text(json.dumps(make_snapshot(client_active_asset)))
 
                 elif cmd == "RESET":
                     c_cash = msg.get("initial_cash")
-                    ledger.seed(feed.active_asset, feed.prices[feed.active_asset], c_cash)
-                    game.dismiss_debrief()
-                    await ws.send_text(json.dumps(make_snapshot(feed.active_asset)))
+                    client_ledger.seed(client_active_asset, feed.prices[client_active_asset], c_cash)
+                    client_game.dismiss_debrief()
+                    await ws.send_text(json.dumps(make_snapshot(client_active_asset)))
 
             except (WebSocketDisconnect, asyncio.CancelledError):
                 break
@@ -729,16 +749,20 @@ async def websocket_endpoint(ws: WebSocket):
     try:
         last_eval_tick_time = 0.0
         while True:
-            tick = await queue.get()
-            sym = tick["symbol"]
-            p = tick["price"]
+            try:
+                tick = await asyncio.wait_for(queue.get(), timeout=0.8)
+                sym = tick["symbol"]
+                p = tick["price"]
+            except asyncio.TimeoutError:
+                sym = client_active_asset
+                p = feed.prices[sym]
 
-            if sym == feed.active_asset:
+            if sym == client_active_asset:
                 now_ts = time.time()
                 fork_point = None
-                if game.state == "EVALUATING" and (now_ts - last_eval_tick_time >= 0.8):
-                    snap = ledger.get_snapshot(feed.prices)
-                    fork_point = game.tick_evaluating(p, snap["portfolio_value"])
+                if client_game.state == "EVALUATING" and (now_ts - last_eval_tick_time >= 0.8):
+                    snap = client_ledger.get_snapshot(feed.prices)
+                    fork_point = client_game.tick_evaluating(p, snap["portfolio_value"])
                     last_eval_tick_time = now_ts
 
                 pred = ml.predict(feed.price_histories[sym])
@@ -757,8 +781,8 @@ async def websocket_endpoint(ws: WebSocket):
                         "sma_ratio": pred["sma_ratio"],
                         "volatility": pred["volatility"]
                     },
-                    "portfolio": ledger.get_snapshot(feed.prices),
-                    "game": game.get_state_payload(),
+                    "portfolio": client_ledger.get_snapshot(feed.prices),
+                    "game": client_game.get_state_payload(),
                     "fork_point": fork_point
                 }
                 try:
@@ -773,7 +797,7 @@ async def websocket_endpoint(ws: WebSocket):
                     "price": p,
                     "prices": dict(feed.prices),
                     "current_candle": curr_c,
-                    "portfolio": ledger.get_snapshot(feed.prices)
+                    "portfolio": client_ledger.get_snapshot(feed.prices)
                 }
                 try:
                     await ws.send_text(json.dumps(out))
