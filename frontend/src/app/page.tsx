@@ -1052,10 +1052,6 @@ export default function Home() {
           </div>
         </div>
       )}
-
-      <footer className="py-6 border-t border-zinc-800/60 text-center text-[11px] text-zinc-500 font-mono tracking-wider uppercase">
-        © 2026 Aegis Systems Inc. Protected Cloud Node
-      </footer>
     </div>
   );
 }
