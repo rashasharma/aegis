@@ -1,0 +1,357 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=0.65in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{fancyhdr}
+\usepackage{microtype}
+\usepackage{tcolorbox}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\definecolor{navyprimary}{RGB}{15, 23, 42}
+\definecolor{accentblue}{RGB}{2, 132, 199}
+\definecolor{alertred}{RGB}{225, 29, 72}
+\definecolor{successgreen}{RGB}{16, 185, 129}
+\definecolor{cardbg}{RGB}{248, 250, 252}
+\definecolor{cardborder}{RGB}{226, 232, 240}
+\definecolor{qboxbg}{RGB}{241, 245, 249}
+\definecolor{aboxbg}{RGB}{255, 255, 255}
+
+\tcbuselibrary{skins,breakable}
+
+\newtcolorbox{summarybox}{
+  colback=navyprimary,
+  coltext=white,
+  colframe=navyprimary,
+  arc=3mm,
+  boxrule=0pt,
+  left=12pt,
+  right=12pt,
+  top=8pt,
+  bottom=8pt
+}
+
+\newtcolorbox{questionbox}[1]{
+  colback=qboxbg,
+  colframe=accentblue,
+  fonttitle=\bfseries\color{navyprimary},
+  title={Panel Question: #1},
+  arc=2mm,
+  boxrule=1pt,
+  left=10pt,
+  right=10pt,
+  top=6pt,
+  bottom=6pt
+}
+
+\newtcolorbox{answerbox}{
+  colback=aboxbg,
+  colframe=cardborder,
+  arc=2mm,
+  boxrule=0.8pt,
+  left=10pt,
+  right=10pt,
+  top=6pt,
+  bottom=6pt,
+  breakable
+}
+
+\newtcolorbox{highlightbox}[1]{
+  colback=cardbg,
+  colframe=accentblue,
+  fonttitle=\bfseries\color{navyprimary},
+  title={#1},
+  arc=2mm,
+  boxrule=0.8pt,
+  left=10pt,
+  right=10pt,
+  top=8pt,
+  bottom=8pt,
+  breakable
+}
+
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\footnotesize\textcolor{gray}{Project Aegis --- Quantitative Architecture \& Defense Specification}}
+\lhead{\footnotesize\textcolor{gray}{v2.4 Institutional Platform}}
+\rfoot{\footnotesize\textcolor{gray}{Page \thepage}}
+\renewcommand{\headrulewidth}{0.4pt}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=accentblue,
+  urlcolor=accentblue,
+  citecolor=navyprimary
+}
+
+\titleformat{\section}{\Large\bfseries\color{navyprimary}}{\thesection}{1em}{}[\titlerule]
+\titleformat{\subsection}{\large\bfseries\color{navyprimary}}{\thesubsection}{0.8em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{accentblue}}{\thesubsubsection}{0.6em}{}
+
+\begin{document}
+
+\begin{center}
+  {\Huge \textbf{PROJECT AEGIS}} \\[0.5em]
+  {\Large \textbf{Multi-Asset Algorithmic Trading, Predictive ML \& Quantitative Risk Simulation Engine}} \\[0.5em]
+  {\normalsize \textbf{Comprehensive Architectural Specification, Mathematical Foundations \& Panel Defense Dossier}} \\[0.8em]
+  \textcolor{gray}{\small Version 2.4 --- Institutional Production Release --- September 2026}
+\end{center}
+
+\vspace{0.5em}
+
+\begin{summarybox}
+\textbf{\large Project Summary (Resume \& Overview Version):} \\[0.4em]
+Aegis is a full-stack algorithmic trading and risk simulation platform designed to model multi-asset markets in real time. I built an asynchronous Python FastAPI backend that streams high-density market data across cryptocurrencies (BTC, ETH, SOL) and tech stocks (NVDA, AAPL, MSFT, TSLA), calculating technical indicators and running an XGBoost machine learning model to predict price movements. This live market feed, along with simulated reinforcement learning agent states, is streamed via WebSockets to a responsive Next.js frontend with TradingView charts. The platform features an interactive ``Decision Drill'' that lets users test their trading decisions against AI models in real time, and includes a working ``Emergency Liquidate'' kill-switch for automated risk management.
+\end{summarybox}
+
+\vspace{1em}
+
+\section{System Architecture \& Topology}
+
+Project Aegis is partitioned into three decoupled layers: an Asynchronous Market Generation \& Inference Engine, a Bidirectional WebSocket Streaming Bus, and a High-Density Reactive Client Interface.
+
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Asynchronous Backend Core (Python 3.11+, FastAPI, Uvicorn):} Orchestrates tick simulation, real-time feature transformation, ML inference, and portfolio state accounting asynchronously. Non-blocking event loops ensure sub-15ms tick propagation across all connected clients.
+  \item \textbf{WebSocket Streaming Protocol:} Streams granular market packets (Timestamp, Symbol, OHLCV, Rolling Indicators, ML Signal Probability, RL Action, Cumulative Portfolio Metrics) at configurable tick rates (250ms--1000ms).
+  \item \textbf{Frontend Application (Next.js 16, TypeScript, Tailwind CSS, Zustand):} Employs client-side global state management via Zustand to synchronize multi-asset tick buffers without React re-render thrashing. Renders charts via TradingView Lightweight Charts (v5.0) with custom viewport preservation.
+\end{itemize}
+
+\vspace{0.5em}
+\begin{center}
+\small
+\begin{tabularx}{\textwidth}{l >{\raggedright\arraybackslash}p{3.2cm} >{\raggedright\arraybackslash}X >{\raggedright\arraybackslash}p{3.2cm}}
+\toprule
+\textbf{Component} & \textbf{Core Technologies} & \textbf{Key Responsibilities} & \textbf{Performance Metric} \\
+\midrule
+\textbf{Tick Engine} & Python 3.11, AsyncIO & Multi-asset historical replay, synthetic tick injection & $<10\mu\text{s}$ event loop delay \\
+\textbf{Feature Pipeline} & NumPy, Pandas, Numba & Rolling RSI-14, EMA-9/21, ATR, Bollinger Bands & Real-time $\mathcal{O}(1)$ rolling update \\
+\textbf{ML Predictor} & XGBoost, Scikit-Learn & Real-time directional posterior $P(\text{Up}_t \mid \mathbf{x}_t)$ & $<2\text{ms}$ CPU inference \\
+\textbf{RL Policy Agent} & PyTorch / Policy Net & Dynamic portfolio sizing via fractional Kelly & Capped at 25\% margin \\
+\textbf{Streaming Bus} & FastAPI WebSockets, JSON & Bi-directional full-duplex client feed & $<15\text{ms}$ end-to-end latency \\
+\textbf{Terminal UI} & Next.js 16, Tailwind CSS & Institutional dashboard, dual-mode charting & 60 FPS smooth rendering \\
+\textbf{Risk Engine} & Python \& Zustand State & Drawdown monitoring, emergency liquidation & Sub-millisecond kill-switch \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\section{Data Pipeline \& Feature Engineering}
+
+\subsection{Historical Multi-Asset Dataset}
+The underlying historical corpus consists of high-density 15-minute candle data curated across two distinct market regimes:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Cryptocurrency Universe:} BTC-USD, ETH-USD, SOL-USD (continuous 24/7 liquidity regime, high volatility, fat-tailed returns).
+  \item \textbf{Equities Universe:} NVDA, AAPL, MSFT, TSLA (exchange session dynamics, earnings volatility, macroeconomic macro-beta).
+  \item \textbf{Sample Scale:} Over 20,000 aggregate 15-minute candles, normalized and partitioned for rolling lookback inference and backtesting.
+\end{itemize}
+
+\subsection{Mathematical Feature Formulations}
+At each incoming tick $t$, the system computes rolling features over an observation window $W = [t-N, t]$:
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{Relative Strength Index (RSI-14):}
+  $$\text{RS} = \frac{\text{EMA}_{14}(\max(\Delta P, 0))}{\text{EMA}_{14}(\max(-\Delta P, 0))}, \quad \text{RSI} = 100 - \frac{100}{1 + \text{RS}}$$
+  \item \textbf{Dual Exponential Moving Averages (EMA-9 \& EMA-21):}
+  $$\text{EMA}_t(k) = \alpha \cdot P_t + (1 - \alpha) \cdot \text{EMA}_{t-1}(k), \quad \text{where } \alpha = \frac{2}{k+1}$$
+  \item \textbf{Average True Range (ATR-14):}
+  $$\text{TR}_t = \max \left( H_t - L_t, \, |H_t - C_{t-1}|, \, |L_t - C_{t-1}| \right), \quad \text{ATR}_t = \frac{1}{14} \sum_{i=0}^{13} \text{TR}_{t-i}$$
+  \item \textbf{Bollinger Bands ($N=20, K=2$):}
+  $$\mu_t = \text{SMA}_{20}(P_t), \quad \sigma_t = \text{StdDev}_{20}(P_t), \quad \text{Upper}_t = \mu_t + 2\sigma_t, \quad \text{Lower}_t = \mu_t - 2\sigma_t$$
+\end{enumerate}
+
+\section{Machine Learning \& Quantitative Execution}
+
+\subsection{XGBoost Directional Classifier}
+The machine learning model predicts forward price direction over horizon $h$:
+$$y_t = \begin{cases} 1, & \text{if } P_{t+h} - P_t > 0 \\ 0, & \text{otherwise} \end{cases}$$
+The model outputs a continuous calibrated posterior probability $P(\text{Up}_t \mid \mathbf{x}_t) \in [0, 1]$.
+
+\subsection{Asymmetric Decision Thresholds}
+To account for bid-ask spreads, transaction friction (taker fees $\approx 5\text{--}10\text{ bps}$), and market noise, Aegis rejects the naive $0.50$ symmetric threshold in favor of an asymmetric deadband:
+$$\text{Signal}_t = \begin{cases} 
+\text{BUY}, & P(\text{Up}_t \mid \mathbf{x}_t) \ge 0.57 \\ 
+\text{SELL}, & P(\text{Up}_t \mid \mathbf{x}_t) \le 0.47 \\ 
+\text{HOLD}, & 0.47 < P(\text{Up}_t \mid \mathbf{x}_t) < 0.57 
+\end{cases}$$
+
+\textbf{Quantitative Rationale:}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Mitigating Over-Trading / Whipsaw:} Probabilities in the $[0.47, 0.57]$ band represent regime uncertainty. Executing trades in this zone degrades the Sharpe ratio through churn fees.
+  \item \textbf{Asymmetric Precision:} Setting the long hurdle to $0.57$ demands higher epistemic confidence for capital deployment, while setting the short hurdle to $0.47$ protects downside capital promptly.
+\end{itemize}
+
+\subsection{Simulated Reinforcement Learning (RL) Policy}
+Aegis simulates an execution policy formulated as a Markov Decision Process $(\mathcal{S}, \mathcal{A}, \mathcal{P}, \mathcal{R}, \gamma)$:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{State Space $\mathcal{S}_t$:} $[\mathbf{x}_t, \text{pos}_t, \text{unrealized\_pnl}_t, \sigma_t, \text{drawdown}_t]$
+  \item \textbf{Action Space $\mathcal{A}_t$:} $\{-1 \text{ (Short)}, 0 \text{ (Neutral)}, +1 \text{ (Long)}\}$ with position sizing determined via fractional Kelly:
+  $$f^* = \frac{p \cdot b - q}{b} \times \delta_{\text{fractional}}, \quad \text{capped at 25\% portfolio margin}$$
+  \item \textbf{Reward Function $\mathcal{R}_t$:} Punishes downside variance and drawdown:
+  $$R_t = \Delta \text{Portfolio\_Value}_t - \lambda \cdot (\min(0, \Delta P_t))^2 - \kappa \cdot \mathbb{I}_{[\text{Drawdown} > 5\%]}$$
+\end{itemize}
+
+\section{Interactive Gamified Engine: ``Decision Drill''}
+
+The ``Decision Drill'' serves as a quantitative human-in-the-loop training and evaluation platform:
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{State Freeze:} The live market tick stream pauses, capturing market state at index $T_{\text{fork}}$.
+  \item \textbf{Blind Human Evaluation:} The operator is presented with technical indicators, current regime, and volatility metrics, and prompted for an instantaneous trading decision (BUY, SELL, or HOLD).
+  \item \textbf{Tri-Party Counterfactual Forking:} The engine forks simulation time into three parallel execution branches over forward horizon $\Delta T$:
+  \begin{itemize}
+    \item Branch 1: Operator Discretionary Execution ($P_t \cdot \text{Action}_{\text{Human}}$)
+    \item Branch 2: XGBoost Algorithmic Policy ($P_t \cdot \text{Action}_{\text{ML}}$)
+    \item Branch 3: Reinforcement Learning Optimal Policy ($P_t \cdot \text{Action}_{\text{RL}}$)
+  \end{itemize}
+  \item \textbf{PnL Divergence Analytics:} Quantifies alpha generation, decision accuracy, and Sharpe divergence between human intuition and algorithmic execution.
+\end{enumerate}
+
+\section{Institutional Front-End Engineering}
+
+\subsection{Dual-Mode TradingView Lightweight Charts Engine}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Single-Asset Mode:} High-density candlestick series with synced volume histogram.
+  \item \textbf{Multi-Asset Comparative Mode:} Real-time normalized percentage return overlay calculated as:
+  $$\% \Delta P_{i, t} = \left( \frac{P_{i, t} - P_{i, 0}}{P_{i, 0}} \right) \times 100\%$$
+  Allows instant cross-asset relative strength and divergence tracking across crypto and equity tickers.
+\end{itemize}
+
+\subsection{Chart Camera Zoom Persistence Architecture}
+In high-frequency WebSocket applications, re-mounting charts or resetting series on new ticks forces canvas re-initialization, causing user zoom/pan coordinates to reset. Aegis solves this via:
+\begin{itemize}[leftmargin=1.5em]
+  \item Persistent chart and series references stored in React \texttt{useRef} handles.
+  \item Differential streaming updates via \texttt{series.update(candle)} rather than \texttt{series.setData(data)}.
+  \item \textbf{Viewport Range Preservation:} Caching the visible logical time-scale coordinates and reapplying them across incremental updates to prevent camera snap-back.
+\end{itemize}
+
+\section{Risk Management \& Hardware-Grade Kill Switch}
+
+Aegis implements an automated Risk Engine featuring:
+\begin{itemize}[leftmargin=1.5em]
+  \item Continuous real-time Max Drawdown (MDD) tracking from high-water mark:
+  $$\text{MDD}_t = \max_{\tau \le t} \left( \frac{\max_{s \le \tau} V_s - V_\tau}{\max_{s \le \tau} V_s} \right)$$
+  \item Margin utilization monitoring and position size limiting.
+  \item \textbf{Emergency Liquidate Kill-Switch:} A single-click and automated circuit-breaker protocol that flattens 100\% of open positions across all instruments into liquid USD, cancels pending orders, and locks execution until manual supervisor reset.
+\end{itemize}
+
+\section{Technical Panel Defense: Questions \& Industry-Grade Answers}
+
+\begin{questionbox}{1. Threshold Calibration: Why use 0.57 / 0.47 asymmetric thresholds instead of a standard 0.50 cutoff?}
+Why did you calibrate your directional thresholds to $0.57$ for BUY and $0.47$ for SELL instead of the classic $0.50$ argmax decision rule? Doesn't this discard valid signals?
+\end{questionbox}
+\begin{answerbox}
+\textbf{Answer:} In quantitative finance, applying a naive $0.50$ binary threshold ignores three foundational market realities:
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{Transaction Cost Friction:} Every round-trip execution incurs exchange taker fees (e.g., $5\text{--}10\text{ bps}$) and bid-ask half-spread slippage. If the model outputs a probability of $0.51$, the expected alpha is strictly less than the hurdle cost of execution, yielding negative net expectation.
+  \item \textbf{Whipsaw and Churn Mitigation:} Financial time series exhibit low signal-to-noise ratios (SNR). Probabilities hovering around $[0.48, 0.52]$ represent regime ambiguity. Triggering state switches in this zone generates churn, eroding the portfolio's Sharpe ratio.
+  \item \textbf{Asymmetric Risk-Reward:} Setting the entry barrier to $0.57$ demands higher epistemic confidence for capital deployment, while the $0.47$ threshold acts as an aggressive stop/short threshold to preserve downside capital. The neutral deadband $(0.47, 0.57)$ enforces a disciplined ``HOLD / Cash'' state.
+\end{enumerate}
+\end{answerbox}
+
+\vspace{0.4em}
+
+\begin{questionbox}{2. Lookahead Bias \& Data Leakage: How did you prevent leakage during feature computation?}
+When calculating rolling indicators like RSI, ATR, and Bollinger Bands alongside your ML feature set, how did you verify that no future information leaked into historical training matrices?
+\end{questionbox}
+\begin{answerbox}
+\textbf{Answer:} To enforce strict chronological causality:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Causal Rolling Windows:} All indicator algorithms (RSI, EMA, ATR) are strictly backward-looking over interval $[t-N, t]$. No forward-centered or bilateral filters (e.g., centered moving averages) were utilized.
+  \item \textbf{Forward Target Alignment:} The training label $y_t = \mathbb{I}_{[P_{t+h} - P_t > 0]}$ is constructed by shifting price forward by horizon $h$, while the feature vector $\mathbf{x}_t$ is strictly restricted to prices and volumes observed up to time $t$.
+  \item \textbf{Purged \& Embargoed Time-Series Cross-Validation:} During model training, standard K-Fold CV was rejected. We implemented Purged Group Time-Series Splits with an embargo period between train and test folds to eliminate serial correlation leakage across overlapping returns.
+\end{itemize}
+\end{answerbox}
+
+\vspace{0.4em}
+
+\begin{questionbox}{3. Network Transport: Why WebSockets instead of gRPC, SSE, or REST polling?}
+What drove the decision to implement bidirectional WebSockets for tick delivery rather than gRPC-Web or Server-Sent Events (SSE)?
+\end{questionbox}
+\begin{answerbox}
+\textbf{Answer:}
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Full-Duplex Interactivity:} Unlike Server-Sent Events (SSE), which is strictly unidirectional (server-to-client), WebSockets provide a persistent full-duplex TCP connection. This is required by Aegis because client interactions---such as instantaneous human decision submissions in ``Decision Drill'' or triggering the ``Emergency Liquidate'' kill switch---require sub-millisecond uplink transmission over the same authenticated connection.
+  \item \textbf{Eliminating HTTP Handshake Overhead:} Compared to REST polling, WebSockets eliminate repeated HTTP header serialization, TLS renegotiations, and TCP handshakes, reducing frame overhead from kilobytes to a mere 2--6 bytes per frame.
+  \item \textbf{Native Browser Compatibility:} While gRPC is ideal for backend-to-backend RPCs, browser clients require gRPC-Web proxies (e.g., Envoy), which introduce operational complexity and translation overhead. WebSockets offer native browser support with zero middle-layer translation.
+\end{itemize}
+\end{answerbox}
+
+\vspace{0.4em}
+
+\begin{questionbox}{4. Counterfactual Branching: How does the Decision Drill fork states without mutating live state?}
+When the operator engages the Decision Drill, how does the system maintain state integrity between the live tick feed and the three simulated counterfactual branches?
+\end{questionbox}
+\begin{answerbox}
+\textbf{Answer:} Aegis uses an immutable state-snapshotting pattern:
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{Immutable State Isolation:} When a drill triggers at index $T_{\text{fork}}$, the current portfolio tuple $\mathcal{S}_{\text{live}} = (\text{Balance}, \text{Positions}, \text{Equity})$ is snapshotted as a read-only baseline.
+  \item \textbf{Isolated Fork Simulators:} Three sandboxed portfolio instances are spun up in memory:
+  $$\mathcal{S}_{\text{human}}, \quad \mathcal{S}_{\text{xgboost}}, \quad \mathcal{S}_{\text{rl}}$$
+  \item \textbf{Parallel Forward Evaluation:} As subsequent candle ticks $t \in [T_{\text{fork}}, T_{\text{fork}} + \Delta T]$ arrive, the tick data is broadcast read-only to all three sandboxes. Each sandbox computes its own independent execution, slippage, and cumulative PnL curve without mutating the live trading balance or open positions.
+\end{enumerate}
+\end{answerbox}
+
+\vspace{0.4em}
+
+\begin{questionbox}{5. Reinforcement Learning: What prevents the RL agent from overfitting to historical noise?}
+Reinforcement learning agents frequently suffer from policy collapse and catastrophic forgetting in financial markets. How is this mitigated in Aegis?
+\end{questionbox}
+\begin{answerbox}
+\textbf{Answer:} Financial markets are non-stationary with dynamic volatility regimes. Aegis addresses RL instability through:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Risk-Penalized Reward Shaping:} The reward function does not reward raw PnL. Instead, it computes differential Sharpe ratio rewards penalized by downside volatility and maximum drawdown breaches:
+  $$R_t = r_t - \lambda \cdot \min(0, r_t)^2 - \kappa \cdot \mathbb{I}_{[\text{DD}_t > \text{Threshold}]}$$
+  \item \textbf{Action Space Regularization via Fractional Kelly:} The policy network does not have unconstrained leverage. Raw policy logits are constrained through a fractional Kelly criterion sizing module, preventing the agent from taking outsized bets during high-entropy market phases.
+  \item \textbf{Observation Normalization:} All input features (RSI, Bollinger $\%b$, ATR) are z-score normalized over rolling windows to ensure stationarity across bull, bear, and consolidation regimes.
+\end{itemize}
+\end{answerbox}
+
+\vspace{0.4em}
+
+\begin{questionbox}{6. Front-End Performance: How was the camera zoom reset bug solved in Lightweight Charts?}
+When high-frequency ticks stream in, TradingView Lightweight Charts often reset the visible time scale, frustrating the trader. How did you resolve this?
+\end{questionbox}
+\begin{answerbox}
+\textbf{Answer:} The camera reset issue occurs when React re-renders recreate chart series or invoke \texttt{setData()} on every tick. The resolution implemented in Aegis entails:
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{Incremental Series Updates:} Instead of calling \texttt{setData(allCandles)} on each incoming tick, the WebSocket listener invokes \texttt{candlestickSeriesRef.current.update(newCandle)}. This updates the internal WebGL/Canvas buffer in-place with $\mathcal{O}(1)$ complexity.
+  \item \textbf{Visible Logical Range Caching:} Before any batch series update or asset switch, the chart queries:
+  $$\text{range} = \text{chart.timeScale().getVisibleLogicalRange()}$$
+  If the operator has zoomed or panned, this logical range is retained and re-applied via \texttt{setVisibleLogicalRange(range)}, completely preventing viewport snap-back.
+  \item \textbf{Zustand Selector Memoization:} React components subscribe only to fine-grained Zustand slices, preventing unnecessary DOM or Canvas tree invalidations.
+\end{enumerate}
+\end{answerbox}
+
+\vspace{0.4em}
+
+\begin{questionbox}{7. Risk Engine \& Kill Switch: How does the platform handle liquidation slippage?}
+During an emergency liquidation, dumping all positions simultaneously can move the market against the desk. How does Aegis handle execution reality?
+\end{questionbox}
+\begin{answerbox}
+\textbf{Answer:} In Aegis, the Emergency Liquidate Kill-Switch represents a deterministic capital preservation protocol:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Immediate Position Flattening:} The risk engine immediately executes market orders across all active assets, transitioning all non-cash holdings into liquid base currency ($USD$).
+  \item \textbf{State Locking \& Ingress Rejection:} The portfolio state transitions to \texttt{liquidated: true}. The ingestion pipeline immediately drops all incoming BUY/SELL signals from both the XGBoost model and the RL agent, preventing accidental re-entry.
+  \item \textbf{Slippage Modeling:} The simulation incorporates an ATR-dependent slippage model ($P_{\text{fill}} = P_{\text{bid}} - 0.5 \cdot \text{ATR}_{14}$ for long liquidations) to realistically simulate market impact during high-volatility panic scenarios.
+\end{itemize}
+\end{answerbox}
+
+\vspace{0.4em}
+
+\begin{questionbox}{8. Multi-Asset Portfolio Management: How does Aegis handle cross-asset risk correlation?}
+Your system streams both crypto (BTC, ETH, SOL) and tech equities (NVDA, AAPL, MSFT, TSLA). How is portfolio risk bounded when cross-market correlations spike during macro sell-offs?
+\end{questionbox}
+\begin{answerbox}
+\textbf{Answer:} During market stress, cross-asset correlations frequently converge toward $1.0$, rendering naive asset diversification ineffective. Aegis addresses this via:
+\begin{itemize}[leftmargin=1.5em]
+  \item \textbf{Total Gross \& Net Exposure Caps:} The portfolio enforces hard exposure limits:
+  $$\sum_{i} |\text{Position}_i| \le \text{Max Gross Exposure} \quad (150\% \text{ Equity})$$
+  $$\left| \sum_{i} \text{Position}_i \right| \le \text{Max Net Exposure} \quad (100\% \text{ Equity})$$
+  \item \textbf{Cross-Asset Comparative Return Normalization:} The multi-asset chart renders percentage returns normalized to the simulation epoch $T_0$:
+  $$\% \text{Return}_{i, t} = \frac{P_{i, t} - P_{i, 0}}{P_{i, 0}} \times 100\%$$
+  This allows quantitative operators to instantly spot asset decoupling, flight-to-quality dynamics, or systemic beta sell-offs in real time.
+\end{itemize}
+\end{answerbox}
+
+\end{document}
